@@ -52,6 +52,12 @@
     },
     "commands": [
       {
+        "command": "devflow.accountMenu",
+        "title": "Cuenta de Dev Flow",
+        "category": "Dev Flow",
+        "icon": "$(account)"
+      },
+      {
         "command": "devflow.selectProject",
         "title": "Cambiar proyecto",
         "category": "Dev Flow",
@@ -111,7 +117,7 @@
           "group": "navigation@2"
         },
         {
-          "command": "devflow.connect",
+          "command": "devflow.accountMenu",
           "when": "view == devflow-tickets",
           "group": "navigation@3"
         }

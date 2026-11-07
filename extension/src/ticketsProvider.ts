@@ -2,13 +2,41 @@ import * as vscode from 'vscode'
 import { DevFlowTicket, DevFlowProject, fetchUserTickets, fetchUserProjects } from './api'
 import { getWorkspaceGitInfo, autoDetectProject } from './gitHelper'
 
+export class UserAccountHeaderItem extends vscode.TreeItem {
+  constructor(public readonly email: string, public readonly userId: string) {
+    const isConnected = Boolean(email || userId)
+    const title = isConnected ? `Cuenta: ${email || 'Conectado'}` : 'Conectar con Dev Flow...'
+    super(title, vscode.TreeItemCollapsibleState.None)
+
+    if (isConnected) {
+      this.description = '✓ En línea'
+      this.tooltip = `Conectado a Dev Flow:\nUsuario: ${email || 'UID: ' + userId}\n\nHaz clic para ver opciones de cuenta (cerrar sesión, cambiar usuario).`
+      this.iconPath = new vscode.ThemeIcon('pass-filled', new vscode.ThemeColor('charts.green'))
+      this.contextValue = 'userAccount'
+      this.command = {
+        command: 'devflow.accountMenu',
+        title: 'Opciones de Cuenta',
+      }
+    } else {
+      this.description = 'Clic para iniciar'
+      this.tooltip = 'No estás conectado a Dev Flow.\nHaz clic aquí para ingresar tu correo electrónico.'
+      this.iconPath = new vscode.ThemeIcon('account')
+      this.contextValue = 'userLogin'
+      this.command = {
+        command: 'devflow.connect',
+        title: 'Conectar cuenta',
+      }
+    }
+  }
+}
+
 export class ProjectHeaderItem extends vscode.TreeItem {
   constructor(
     public readonly project: DevFlowProject | null,
     public readonly isAuto: boolean,
     public readonly totalTickets: number
   ) {
-    const title = project ? `Proyecto: ${project.name}` : 'Todos los proyectos'
+    const title = project ? `Proyecto: ${project.name}` : 'Proyecto: Todos los proyectos'
     super(title, vscode.TreeItemCollapsibleState.None)
 
     this.description = isAuto ? '✨ Auto-vinculado por Git' : project ? '(Filtro activo)' : '(Sin filtro)'
@@ -146,21 +174,17 @@ export class TicketsProvider implements vscode.TreeDataProvider<vscode.TreeItem>
     const userId = config.get<string>('userId') || ''
     const userEmail = config.get<string>('userEmail') || ''
 
-    if (!userId && !userEmail) {
-      const connectItem = new vscode.TreeItem('Conectar cuenta de dev->flow...')
-      connectItem.description = 'Ingresa tu UID de dev-flow'
-      connectItem.command = {
-        command: 'devflow.connect',
-        title: 'Conectar cuenta',
-      }
-      connectItem.iconPath = new vscode.ThemeIcon('account')
-      return [connectItem]
-    }
-
     if (!element) {
-      // 1. Cargar proyectos si no están cargados
+      const accountItem = new UserAccountHeaderItem(userEmail, userId)
+
+      // Si no hay correo ni userId, solo mostramos el botón para conectar
+      if (!userId && !userEmail) {
+        return [accountItem]
+      }
+
+      // 1. Cargar proyectos
       if (this.projects.length === 0) {
-        this.projects = await fetchUserProjects(userId)
+        this.projects = await fetchUserProjects(userId, userEmail)
       }
 
       // 2. Si no hay proyecto seleccionado, intentar auto-detección por repositorio Git
@@ -173,9 +197,15 @@ export class TicketsProvider implements vscode.TreeDataProvider<vscode.TreeItem>
         }
       }
 
-      // 3. Consultar tickets (filtrados por proyecto si hay uno activo)
+      // 3. Consultar tickets
       const targetProjectId = this.activeProject ? this.activeProject.id : undefined
-      this.tickets = await fetchUserTickets(userId, userEmail, targetProjectId)
+      const { tickets, resolvedUid } = await fetchUserTickets(userId, userEmail, targetProjectId)
+      this.tickets = tickets
+
+      // Si obtuvimos un UID resuelto y aún no estaba guardado, persistirlo
+      if (resolvedUid && !userId) {
+        await config.update('userId', resolvedUid, vscode.ConfigurationTarget.Global)
+      }
 
       const inProgress = this.tickets.filter(t => t.status === 'en-proceso')
       const todo = this.tickets.filter(t => t.status === 'sin-realizar')
@@ -183,10 +213,11 @@ export class TicketsProvider implements vscode.TreeDataProvider<vscode.TreeItem>
       const done = this.tickets.filter(t => t.status === 'completado')
 
       // Header de selector de proyecto
-      const header = new ProjectHeaderItem(this.activeProject, this.isAutoDetected, this.tickets.length)
+      const projectHeader = new ProjectHeaderItem(this.activeProject, this.isAutoDetected, this.tickets.length)
 
       return [
-        header,
+        accountItem,
+        projectHeader,
         new StatusGroupItem('En proceso', 'en-proceso', inProgress.length, vscode.TreeItemCollapsibleState.Expanded),
         new StatusGroupItem('Sin realizar', 'sin-realizar', todo.length, vscode.TreeItemCollapsibleState.Expanded),
         new StatusGroupItem('Testing', 'testing', testing.length, vscode.TreeItemCollapsibleState.Collapsed),

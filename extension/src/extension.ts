@@ -19,61 +19,135 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Status Bar Item
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100)
-  statusBar.text = '$(pulse) Dev Flow: Cargando...'
-  statusBar.tooltip = 'Dev Flow - Haz clic para seleccionar o cambiar de proyecto'
-  statusBar.command = 'devflow.selectProject'
   statusBar.show()
   context.subscriptions.push(statusBar)
 
   const updateStatusBar = () => {
+    const config = vscode.workspace.getConfiguration('devflow')
+    const userEmail = config.get<string>('userEmail') || ''
+    const userId = config.get<string>('userId') || ''
     const active = provider.getActiveProject()
-    if (active) {
-      statusBar.text = `$(pulse) Dev Flow: 📁 ${active.name}`
-      statusBar.tooltip = `Proyecto activo: ${active.name}\n${active.github ? 'Repo: ' + active.github : ''}\nHaz clic para cambiar`
+
+    if (userEmail || userId) {
+      const emailShort = userEmail ? userEmail.split('@')[0] : 'Conectado'
+      const projName = active ? active.name : 'Todos'
+      statusBar.text = `$(check) Dev Flow: ${emailShort} | 📁 ${projName}`
+      statusBar.tooltip = `Usuario: ${userEmail || userId}\nProyecto: ${projName}\n\nHaz clic para ver opciones de Dev Flow.`
+      statusBar.command = 'devflow.accountMenu'
     } else {
-      statusBar.text = '$(pulse) Dev Flow: 🌐 Todos'
-      statusBar.tooltip = 'Mostrando todos los proyectos\nHaz clic para filtrar por proyecto'
+      statusBar.text = '$(account) Dev Flow: Conectar cuenta'
+      statusBar.tooltip = 'Haz clic para conectar tu cuenta de Dev Flow'
+      statusBar.command = 'devflow.connect'
     }
   }
 
-  // Listener cuando cambian los datos
+  updateStatusBar()
+
+  // Listener cuando cambian los datos del árbol
   provider.onDidChangeTreeData(() => {
     updateStatusBar()
   })
 
-  // Comando: Conectar cuenta
+  // Comando: Conectar cuenta (Solo correo, sin complicaciones)
   const connectCmd = vscode.commands.registerCommand('devflow.connect', async () => {
-    const uid = await vscode.window.showInputBox({
-      prompt: 'Ingresa tu UID o ID de usuario de dev->flow (en Ajustes de tu cuenta)',
-      placeHolder: 'Ej: 9f8a7b6c...',
-    })
-
-    if (!uid) return
+    const config = vscode.workspace.getConfiguration('devflow')
+    const currentEmail = config.get<string>('userEmail') || 'alexugsha87@gmail.com'
 
     const email = await vscode.window.showInputBox({
-      prompt: 'Ingresa tu correo de dev->flow',
-      placeHolder: 'usuario@ejemplo.com',
+      title: 'Conectar con Dev Flow',
+      prompt: 'Ingresa tu correo electrónico registrado en Dev Flow',
+      value: currentEmail,
+      placeHolder: 'ejemplo@gmail.com',
+      validateInput: (val) => {
+        if (!val || !val.includes('@')) {
+          return 'Por favor ingresa un correo electrónico válido'
+        }
+        return null
+      },
     })
 
-    const config = vscode.workspace.getConfiguration('devflow')
-    await config.update('userId', uid.trim(), vscode.ConfigurationTarget.Global)
-    if (email) {
-      await config.update('userEmail', email.trim(), vscode.ConfigurationTarget.Global)
-    }
+    if (!email) return
 
-    vscode.window.showInformationMessage('¡Cuenta de Dev Flow conectada con éxito!')
+    await config.update('userEmail', email.trim(), vscode.ConfigurationTarget.Global)
+
+    vscode.window.showInformationMessage(`🎉 ¡Conectado con éxito a Dev Flow como ${email.trim()}!`)
     provider.projects = []
     provider.refresh()
   })
   context.subscriptions.push(connectCmd)
 
+  // Comando: Menú de opciones de cuenta
+  const accountMenuCmd = vscode.commands.registerCommand('devflow.accountMenu', async () => {
+    const config = vscode.workspace.getConfiguration('devflow')
+    const email = config.get<string>('userEmail') || ''
+    const uid = config.get<string>('userId') || ''
+
+    const options = [
+      {
+        label: '$(sync) Actualizar tablero de tickets',
+        description: 'Recargar tareas en vivo desde Dev Flow',
+        action: 'refresh',
+      },
+      {
+        label: '$(folder) Cambiar proyecto activo',
+        description: provider.activeProject ? `Actual: ${provider.activeProject.name}` : 'Actualmente sin filtro',
+        action: 'project',
+      },
+      {
+        label: '$(mail) Cambiar correo de la cuenta',
+        description: email ? `Actual: ${email}` : 'No configurado',
+        action: 'changeEmail',
+      },
+      {
+        label: '$(globe) Abrir Dev Flow en el navegador',
+        description: 'Ir al tablero web completo',
+        action: 'openWeb',
+      },
+      {
+        label: '$(sign-out) Desconectar cuenta / Cerrar sesión',
+        description: 'Eliminar las credenciales locales de este editor',
+        action: 'logout',
+      },
+    ]
+
+    const selected = await vscode.window.showQuickPick(options, {
+      placeHolder: email ? `Dev Flow • Conectado como ${email}` : 'Dev Flow • Opciones de cuenta',
+    })
+
+    if (!selected) return
+
+    switch (selected.action) {
+      case 'refresh':
+        vscode.commands.executeCommand('devflow.refresh')
+        break
+      case 'project':
+        vscode.commands.executeCommand('devflow.selectProject')
+        break
+      case 'changeEmail':
+        vscode.commands.executeCommand('devflow.connect')
+        break
+      case 'openWeb':
+        vscode.env.openExternal(vscode.Uri.parse('https://dev-flow-7b197.web.app'))
+        break
+      case 'logout':
+        await config.update('userEmail', '', vscode.ConfigurationTarget.Global)
+        await config.update('userId', '', vscode.ConfigurationTarget.Global)
+        provider.projects = []
+        provider.setActiveProject(null, false)
+        vscode.window.showInformationMessage('Sesión cerrada de Dev Flow en este editor.')
+        break
+    }
+  })
+  context.subscriptions.push(accountMenuCmd)
+
   // Comando: Seleccionar / Cambiar Proyecto
   const selectProjectCmd = vscode.commands.registerCommand('devflow.selectProject', async () => {
     const config = vscode.workspace.getConfiguration('devflow')
     const userId = config.get<string>('userId') || ''
+    const userEmail = config.get<string>('userEmail') || ''
 
-    if (!userId) {
-      const connectAction = await vscode.window.showWarningMessage('Primero debes conectar tu cuenta de Dev Flow.', 'Conectar ahora')
+    if (!userId && !userEmail) {
+      const connectAction = await vscode.window.showWarningMessage('Primero debes conectar tu correo de Dev Flow.', 'Conectar ahora')
       if (connectAction === 'Conectar ahora') {
         vscode.commands.executeCommand('devflow.connect')
       }
@@ -81,7 +155,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     if (provider.projects.length === 0) {
-      provider.projects = await fetchUserProjects(userId)
+      provider.projects = await fetchUserProjects(userId, userEmail)
     }
 
     const { remoteUrl, folderName } = await getWorkspaceGitInfo()

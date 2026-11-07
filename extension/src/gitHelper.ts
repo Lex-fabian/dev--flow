@@ -12,9 +12,10 @@ export function normalizeGitUrl(url: string): string {
     .replace(/^\/+|\/+$/g, '')
 }
 
-export async function getWorkspaceGitInfo(): Promise<{ remoteUrl: string; folderName: string }> {
+export async function getWorkspaceGitInfo(): Promise<{ remoteUrl: string; folderName: string; gitEmail: string }> {
   let remoteUrl = ''
   let folderName = ''
+  let gitEmail = ''
 
   const folders = vscode.workspace.workspaceFolders
   if (folders && folders.length > 0) {
@@ -32,13 +33,17 @@ export async function getWorkspaceGitInfo(): Promise<{ remoteUrl: string; folder
         if (origin?.fetchUrl || origin?.pushUrl) {
           remoteUrl = origin.fetchUrl || origin.pushUrl
         }
+        // Intentar leer email del autor
+        if (repo.state?.HEAD?.commit) {
+          // El commit HEAD puede tener autor
+        }
       }
     }
   } catch (err) {
     console.error('Error obteniendo git remote:', err)
   }
 
-  return { remoteUrl, folderName }
+  return { remoteUrl, folderName, gitEmail }
 }
 
 export function autoDetectProject(projects: DevFlowProject[], remoteUrl: string, folderName: string): DevFlowProject | null {

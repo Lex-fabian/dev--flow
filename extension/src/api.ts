@@ -1,6 +1,6 @@
 /**
  * @file api.ts
- * @description Conexión con Firestore REST API para dev->flow
+ * @description Conexión con Firestore REST API para Dev Flow
  */
 
 export interface DevFlowTicket {
@@ -11,6 +11,7 @@ export interface DevFlowTicket {
   priority: 'urgent' | 'high' | 'medium' | 'low'
   projectId: string
   assignedToEmail?: string
+  createdByEmail?: string
   gitBranch?: string
   createdAt?: number
 }
@@ -21,6 +22,7 @@ export interface DevFlowProject {
   description?: string
   github?: string
   userId: string
+  memberEmails?: string[]
 }
 
 const FIRESTORE_BASE = 'https://firestore.googleapis.com/v1/projects/dev-flow-7b197/databases/(default)/documents'
@@ -36,23 +38,20 @@ function parseFirestoreField(field: any): any {
   return null
 }
 
-export async function fetchUserProjects(userId: string): Promise<DevFlowProject[]> {
+function parseProjectMembers(field: any): string[] {
+  if (!field?.arrayValue?.values) return []
+  return field.arrayValue.values
+    .map((v: any) => v.mapValue?.fields?.email?.stringValue?.toLowerCase() || '')
+    .filter(Boolean)
+}
+
+export async function fetchUserProjects(userId?: string, userEmail?: string): Promise<DevFlowProject[]> {
   try {
     const queryPayload: any = {
       structuredQuery: {
         from: [{ collectionId: 'projects' }],
         limit: 50,
       },
-    }
-
-    if (userId) {
-      queryPayload.structuredQuery.where = {
-        fieldFilter: {
-          field: { fieldPath: 'userId' },
-          op: 'EQUAL',
-          value: { stringValue: userId },
-        },
-      }
     }
 
     const res = await fetch(`${FIRESTORE_BASE}:runQuery`, {
@@ -65,21 +64,38 @@ export async function fetchUserProjects(userId: string): Promise<DevFlowProject[
     const results = await res.json()
     if (!Array.isArray(results)) return []
 
+    const cleanEmail = (userEmail || '').trim().toLowerCase()
     const projects: DevFlowProject[] = []
+
     for (const item of results) {
       if (!item.document || !item.document.fields) continue
       const f = item.document.fields
       const pathParts = item.document.name.split('/')
       const id = pathParts[pathParts.length - 1]
 
+      const pUserId = parseFirestoreField(f.userId) || ''
+      const memberEmails = parseProjectMembers(f.members)
+
+      // Filtrar si el usuario coincide (propietario o miembro)
+      if (cleanEmail) {
+        const isMember = memberEmails.includes(cleanEmail)
+        const isOwner = userId && pUserId === userId
+        // Si no tenemos userId aún pero el email coincide o no hay filtro estricto
+        if (!isMember && !isOwner && memberEmails.length > 0) {
+          continue
+        }
+      }
+
       projects.push({
         id,
         name: parseFirestoreField(f.name) || 'Proyecto sin nombre',
         description: parseFirestoreField(f.description) || '',
         github: parseFirestoreField(f.github) || '',
-        userId: parseFirestoreField(f.userId) || '',
+        userId: pUserId,
+        memberEmails,
       })
     }
+
     return projects
   } catch (err) {
     console.error('Error fetching projects in extension:', err)
@@ -87,25 +103,14 @@ export async function fetchUserProjects(userId: string): Promise<DevFlowProject[
   }
 }
 
-export async function fetchUserTickets(userId: string, userEmail?: string, projectId?: string): Promise<DevFlowTicket[]> {
+export async function fetchUserTickets(userId?: string, userEmail?: string, projectId?: string): Promise<{ tickets: DevFlowTicket[]; resolvedUid?: string }> {
   try {
-    // Consulta estructurada por userId o assignedToEmail
     const queryPayload: any = {
       structuredQuery: {
         from: [{ collectionId: 'tickets' }],
         orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
         limit: 100,
       },
-    }
-
-    if (userId) {
-      queryPayload.structuredQuery.where = {
-        fieldFilter: {
-          field: { fieldPath: 'userId' },
-          op: 'EQUAL',
-          value: { stringValue: userId },
-        },
-      }
     }
 
     const res = await fetch(`${FIRESTORE_BASE}:runQuery`, {
@@ -115,21 +120,47 @@ export async function fetchUserTickets(userId: string, userEmail?: string, proje
     })
 
     if (!res.ok) {
-      throw new Error(`Error en API dev->flow (${res.status})`)
+      return { tickets: [] }
     }
 
     const results = await res.json()
-    if (!Array.isArray(results)) return []
+    if (!Array.isArray(results)) return { tickets: [] }
 
+    const cleanEmail = (userEmail || '').trim().toLowerCase()
     const tickets: DevFlowTicket[] = []
+    let resolvedUid: string | undefined
+
     for (const item of results) {
       if (!item.document || !item.document.fields) continue
       const f = item.document.fields
       const pathParts = item.document.name.split('/')
       const id = pathParts[pathParts.length - 1]
 
-      const ticketProjectId = parseFirestoreField(f.projectId) || ''
-      if (projectId && ticketProjectId && ticketProjectId !== projectId) {
+      const tAssigned = (parseFirestoreField(f.assignedToEmail) || '').trim().toLowerCase()
+      const tCreatedByEmail = (parseFirestoreField(f.createdByEmail) || '').trim().toLowerCase()
+      const tUserId = parseFirestoreField(f.userId) || parseFirestoreField(f.createdBy) || ''
+      const tProjectId = parseFirestoreField(f.projectId) || ''
+
+      // Auto-resolver UID del usuario si encontramos su email en el ticket
+      if (cleanEmail && (tAssigned === cleanEmail || tCreatedByEmail === cleanEmail) && tUserId) {
+        resolvedUid = tUserId
+      }
+
+      // Si se especificó correo, verificar si pertenece a este usuario
+      if (cleanEmail) {
+        const matchesUser =
+          tAssigned === cleanEmail ||
+          tCreatedByEmail === cleanEmail ||
+          (userId && tUserId === userId)
+
+        // Si no coincide y tiene correos explícitos, omitir
+        if (!matchesUser && (tAssigned || tCreatedByEmail)) {
+          continue
+        }
+      }
+
+      // Filtrar por proyecto si hay uno seleccionado
+      if (projectId && tProjectId && tProjectId !== projectId) {
         continue
       }
 
@@ -139,16 +170,17 @@ export async function fetchUserTickets(userId: string, userEmail?: string, proje
         description: parseFirestoreField(f.description) || '',
         status: parseFirestoreField(f.status) || 'sin-realizar',
         priority: parseFirestoreField(f.priority) || 'medium',
-        projectId: ticketProjectId,
-        assignedToEmail: parseFirestoreField(f.assignedToEmail) || '',
+        projectId: tProjectId,
+        assignedToEmail: tAssigned,
+        createdByEmail: tCreatedByEmail,
         gitBranch: parseFirestoreField(f.gitBranch) || '',
         createdAt: parseFirestoreField(f.createdAt) || 0,
       })
     }
 
-    return tickets
+    return { tickets, resolvedUid }
   } catch (err) {
-    console.error('Error obteniendo tickets en extensión:', err)
-    return []
+    console.error('Error fetching tickets in extension:', err)
+    return { tickets: [] }
   }
 }
