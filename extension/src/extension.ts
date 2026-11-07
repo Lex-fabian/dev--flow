@@ -61,7 +61,22 @@ export function activate(context: vscode.ExtensionContext) {
     const slug = slugify(item.ticket.title)
     const branchName = `feature/${code}-${slug}`
 
-    const terminal = vscode.window.activeTerminal || vscode.window.createTerminal('dev->flow')
+    const gitExt = vscode.extensions.getExtension<any>('vscode.git')
+    if (gitExt) {
+      try {
+        const gitApi = gitExt.exports.getAPI(1)
+        const repo = gitApi?.repositories?.[0]
+        if (repo) {
+          await repo.createBranch(branchName, true)
+          vscode.window.showInformationMessage(`Rama '${branchName}' creada y activada.`)
+          return
+        }
+      } catch {
+        // Fallback to terminal
+      }
+    }
+
+    const terminal = vscode.window.activeTerminal || vscode.window.createTerminal('Dev Flow')
     terminal.show()
     terminal.sendText(`git checkout -b ${branchName}`)
 

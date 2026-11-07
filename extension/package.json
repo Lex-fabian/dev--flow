@@ -8,14 +8,19 @@
   "icon": "icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Lex-fabian/dev--flow"
+    "url": "https://github.com/Lex-fabian/dev--flow.git"
   },
   "homepage": "https://github.com/Lex-fabian/dev--flow#readme",
+  "bugs": {
+    "url": "https://github.com/Lex-fabian/dev--flow/issues"
+  },
+  "qna": "marketplace",
   "engines": {
     "vscode": "^1.80.0"
   },
   "categories": [
-    "Project Management"
+    "SCM Providers",
+    "Other"
   ],
   "keywords": [
     "kanban",
@@ -48,37 +53,37 @@
     "commands": [
       {
         "command": "devflow.connect",
-        "title": "Conectar con dev->flow",
-        "category": "dev->flow"
+        "title": "Conectar cuenta",
+        "category": "Dev Flow"
       },
       {
         "command": "devflow.refresh",
         "title": "Actualizar tickets",
-        "category": "dev->flow",
+        "category": "Dev Flow",
         "icon": "$(refresh)"
       },
       {
         "command": "devflow.createBranch",
         "title": "Crear y cambiar a rama Git",
-        "category": "dev->flow",
+        "category": "Dev Flow",
         "icon": "$(git-branch)"
       },
       {
         "command": "devflow.copyCommit",
-        "title": "Copiar comando de commit sugerido",
-        "category": "dev->flow",
+        "title": "Copiar commit sugerido",
+        "category": "Dev Flow",
         "icon": "$(copy)"
       },
       {
         "command": "devflow.openWeb",
-        "title": "Abrir en dev->flow Web",
-        "category": "dev->flow",
+        "title": "Abrir en Dev Flow Web",
+        "category": "Dev Flow",
         "icon": "$(globe)"
       },
       {
         "command": "devflow.changeStatus",
         "title": "Cambiar estado del ticket",
-        "category": "dev->flow",
+        "category": "Dev Flow",
         "icon": "$(edit)"
       }
     ],
@@ -119,22 +124,22 @@
       ]
     },
     "configuration": {
-      "title": "dev->flow",
+      "title": "Dev Flow",
       "properties": {
         "devflow.userEmail": {
           "type": "string",
           "default": "",
-          "description": "Correo electrónico de tu cuenta dev->flow"
+          "description": "Correo electronico de tu cuenta dev-flow"
         },
         "devflow.userId": {
           "type": "string",
           "default": "",
-          "description": "ID de usuario (UID) en dev->flow"
+          "description": "ID de usuario (UID) en dev-flow"
         },
         "devflow.webUrl": {
           "type": "string",
-          "default": "",
-          "description": "URL de la aplicación web dev->flow"
+          "default": "https://dev-flow-7b197.web.app",
+          "description": "URL de la aplicacion web dev-flow"
         }
       }
     }
