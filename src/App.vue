@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { signOut, onAuthStateChanged, type User } from 'firebase/auth'
 import { auth } from './firebase'
@@ -486,6 +486,32 @@ const saveNotificationEmail = () => {
   notificationEmailSaved.value = true
   setTimeout(() => { notificationEmailSaved.value = false }, 2500)
 }
+
+// VS Code Extension Integration
+const vscodeTokenCopied = ref(false)
+
+async function handleVSCodeAuth() {
+  if (!user.value) return
+  const token = await user.value.getIdToken()
+  const uid = user.value.uid
+  const email = user.value.email || ''
+  const uri = `vscode://dev-flow.dev-flow/auth?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}&uid=${encodeURIComponent(uid)}`
+  window.location.href = uri
+}
+
+async function copyVSCodeToken() {
+  if (!user.value) return
+  const token = await user.value.getIdToken()
+  await navigator.clipboard.writeText(token)
+  vscodeTokenCopied.value = true
+  setTimeout(() => { vscodeTokenCopied.value = false }, 2500)
+}
+
+watch([ready, user], ([isReady, u]: [boolean, User | null]) => {
+  if (isReady && u && route.query.action === 'vscode-auth') {
+    handleVSCodeAuth()
+  }
+})
 
 const onAvatarChange = (e: Event) => {
   const input = e.target as HTMLInputElement
@@ -1033,6 +1059,40 @@ const onAvatarChange = (e: Event) => {
                     <div class="actions-right">
                       <button type="button" class="btn-text-danger" @click="cancelNotificationEmail">Cancelar</button>
                       <button type="button" class="btn-outline-white" @click="saveNotificationEmail">Guardar</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="settings-opt-divider"></div>
+
+                <!-- Sección Extensión de VS Code -->
+                <div class="settings-conn-block">
+                  <div class="connection-header-row">
+                    <div class="connection-icon-title">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="conn-icon">
+                        <polyline points="16 18 22 12 16 6" />
+                        <polyline points="8 6 2 12 8 18" />
+                      </svg>
+                      <div>
+                        <span class="settings-field-label">Extensión de Visual Studio Code</span>
+                        <p class="settings-field-desc">Vincula tu editor VS Code para ver tickets y crear ramas en vivo</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p class="conn-info-text">
+                    Sincroniza tus tableros, tickets y automatización de ramas directamente dentro de tu editor VS Code:
+                  </p>
+
+                  <div class="connection-actions-row" style="margin-top: 12px">
+                    <div class="actions-left" style="display: flex; gap: 10px; align-items: center">
+                      <button type="button" class="btn-outline-white" @click="handleVSCodeAuth">
+                        ⚡ Vincular con VS Code en 1 Clic
+                      </button>
+                      <button type="button" class="btn-outline-white" @click="copyVSCodeToken">
+                        Copiar Token de Acceso
+                      </button>
+                      <span v-if="vscodeTokenCopied" class="success-hint">¡Token copiado!</span>
                     </div>
                   </div>
                 </div>

@@ -52,16 +52,22 @@
     },
     "commands": [
       {
-        "command": "devflow.accountMenu",
-        "title": "Cuenta de Dev Flow",
+        "command": "devflow.selectWorkspace",
+        "title": "Cambiar espacio de trabajo",
         "category": "Dev Flow",
-        "icon": "$(account)"
+        "icon": "$(organization)"
       },
       {
         "command": "devflow.selectProject",
         "title": "Cambiar proyecto",
         "category": "Dev Flow",
         "icon": "$(folder)"
+      },
+      {
+        "command": "devflow.accountMenu",
+        "title": "Cuenta de Dev Flow",
+        "category": "Dev Flow",
+        "icon": "$(account)"
       },
       {
         "command": "devflow.connect",
@@ -107,19 +113,24 @@
     "menus": {
       "view/title": [
         {
-          "command": "devflow.selectProject",
+          "command": "devflow.selectWorkspace",
           "when": "view == devflow-tickets",
           "group": "navigation@1"
         },
         {
-          "command": "devflow.refresh",
+          "command": "devflow.selectProject",
           "when": "view == devflow-tickets",
           "group": "navigation@2"
         },
         {
-          "command": "devflow.accountMenu",
+          "command": "devflow.refresh",
           "when": "view == devflow-tickets",
           "group": "navigation@3"
+        },
+        {
+          "command": "devflow.accountMenu",
+          "when": "view == devflow-tickets",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
@@ -148,10 +159,15 @@
     "configuration": {
       "title": "Dev Flow",
       "properties": {
+        "devflow.authToken": {
+          "type": "string",
+          "default": "",
+          "description": "Token de autenticación para la API de Dev Flow"
+        },
         "devflow.userEmail": {
           "type": "string",
           "default": "",
-          "description": "Correo electronico de tu cuenta dev-flow"
+          "description": "Correo electrónico de tu cuenta dev-flow"
         },
         "devflow.userId": {
           "type": "string",
