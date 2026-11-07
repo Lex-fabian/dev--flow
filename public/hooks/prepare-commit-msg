@@ -1,0 +1,42 @@
+#!/bin/sh
+# -------------------------------------------------------------
+# dev->flow Git Hook: prepare-commit-msg
+# Inyecta automaticamente el ID del ticket de la rama activa
+# Ejemplo: rama 'feature/DF-5-auth' -> 'mi mensaje [fixes DF-5]'
+# -------------------------------------------------------------
+
+COMMIT_MSG_FILE=$1
+COMMIT_SOURCE=$2
+SHA1=$3
+
+# Salir si es un merge o squash
+if [ "$COMMIT_SOURCE" = "merge" ] || [ "$COMMIT_SOURCE" = "squash" ]; then
+  exit 0
+fi
+
+# Obtener nombre de la rama actual
+BRANCH_NAME=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ -z "$BRANCH_NAME" ]; then
+  exit 0
+fi
+
+# Detectar codigo de ticket en el nombre de la rama (DF-123 o PREFIJO-123)
+TICKET_ID=$(echo "$BRANCH_NAME" | grep -o -E '(DF-[0-9]+|[A-Z]{2,10}-[0-9]+)' | head -n 1)
+
+if [ -n "$TICKET_ID" ]; then
+  ORIGINAL_MSG=$(cat "$COMMIT_MSG_FILE" 2>/dev/null)
+  
+  # Si el mensaje no contiene ya el codigo del ticket
+  if ! echo "$ORIGINAL_MSG" | grep -q -i "$TICKET_ID"; then
+    FIRST_LINE=$(head -n 1 "$COMMIT_MSG_FILE" 2>/dev/null)
+    REST_OF_MSG=$(tail -n +2 "$COMMIT_MSG_FILE" 2>/dev/null)
+    
+    if [ -n "$FIRST_LINE" ]; then
+      if [ -n "$REST_OF_MSG" ]; then
+        printf "%s [fixes %s]\n\n%s" "$FIRST_LINE" "$TICKET_ID" "$REST_OF_MSG" > "$COMMIT_MSG_FILE"
+      else
+        printf "%s [fixes %s]\n" "$FIRST_LINE" "$TICKET_ID" > "$COMMIT_MSG_FILE"
+      fi
+    fi
+  fi
+fi

@@ -1,0 +1,21 @@
+{
+  "name": "Dev Flow",
+  "short_name": "Dev Flow",
+  "description": "Gestión de proyectos con tablero Kanban",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/icono-dev-flow.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icono-dev-flow.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

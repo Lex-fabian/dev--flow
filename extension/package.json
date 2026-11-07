@@ -1,0 +1,152 @@
+{
+  "name": "dev-flow",
+  "displayName": "Dev Flow",
+  "description": "Tablero Kanban de tickets y automatizacion de ramas Git para desarrolladores",
+  "version": "1.0.0",
+  "publisher": "dev-flow",
+  "license": "MIT",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Lex-fabian/dev--flow"
+  },
+  "homepage": "https://github.com/Lex-fabian/dev--flow#readme",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Project Management"
+  ],
+  "keywords": [
+    "kanban",
+    "tickets",
+    "git",
+    "productivity"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onView:devflow-tickets"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "devflow-container",
+          "title": "Dev Flow",
+          "icon": "icon.png"
+        }
+      ]
+    },
+    "views": {
+      "devflow-container": [
+        {
+          "id": "devflow-tickets",
+          "name": "Tablero de Tickets"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "devflow.connect",
+        "title": "Conectar con dev->flow",
+        "category": "dev->flow"
+      },
+      {
+        "command": "devflow.refresh",
+        "title": "Actualizar tickets",
+        "category": "dev->flow",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "devflow.createBranch",
+        "title": "Crear y cambiar a rama Git",
+        "category": "dev->flow",
+        "icon": "$(git-branch)"
+      },
+      {
+        "command": "devflow.copyCommit",
+        "title": "Copiar comando de commit sugerido",
+        "category": "dev->flow",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "devflow.openWeb",
+        "title": "Abrir en dev->flow Web",
+        "category": "dev->flow",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "devflow.changeStatus",
+        "title": "Cambiar estado del ticket",
+        "category": "dev->flow",
+        "icon": "$(edit)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "devflow.refresh",
+          "when": "view == devflow-tickets",
+          "group": "navigation"
+        },
+        {
+          "command": "devflow.connect",
+          "when": "view == devflow-tickets",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "devflow.createBranch",
+          "when": "view == devflow-tickets && viewItem == ticket",
+          "group": "inline@1"
+        },
+        {
+          "command": "devflow.copyCommit",
+          "when": "view == devflow-tickets && viewItem == ticket",
+          "group": "inline@2"
+        },
+        {
+          "command": "devflow.openWeb",
+          "when": "view == devflow-tickets && viewItem == ticket",
+          "group": "inline@3"
+        },
+        {
+          "command": "devflow.changeStatus",
+          "when": "view == devflow-tickets && viewItem == ticket",
+          "group": "1_actions"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "dev->flow",
+      "properties": {
+        "devflow.userEmail": {
+          "type": "string",
+          "default": "",
+          "description": "Correo electrónico de tu cuenta dev->flow"
+        },
+        "devflow.userId": {
+          "type": "string",
+          "default": "",
+          "description": "ID de usuario (UID) en dev->flow"
+        },
+        "devflow.webUrl": {
+          "type": "string",
+          "default": "",
+          "description": "URL de la aplicación web dev->flow"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.3.0"
+  }
+}
