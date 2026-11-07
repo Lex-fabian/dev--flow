@@ -1,16 +1,66 @@
 import * as vscode from 'vscode'
-import { DevFlowTicket, fetchUserTickets } from './api'
+import { DevFlowTicket, DevFlowProject, fetchUserTickets, fetchUserProjects } from './api'
+import { getWorkspaceGitInfo, autoDetectProject } from './gitHelper'
+
+export class ProjectHeaderItem extends vscode.TreeItem {
+  constructor(
+    public readonly project: DevFlowProject | null,
+    public readonly isAuto: boolean,
+    public readonly totalTickets: number
+  ) {
+    const title = project ? `Proyecto: ${project.name}` : 'Todos los proyectos'
+    super(title, vscode.TreeItemCollapsibleState.None)
+
+    this.description = isAuto ? '✨ Auto-vinculado por Git' : project ? '(Filtro activo)' : '(Sin filtro)'
+    this.tooltip = project
+      ? `Proyecto: ${project.name}\nGitHub: ${project.github || 'No vinculado'}\nTickets activos: ${totalTickets}\n\nHaz clic para cambiar de proyecto.`
+      : 'Mostrando tickets de todos tus proyectos.\n\nHaz clic para filtrar por un proyecto específico.'
+
+    this.iconPath = new vscode.ThemeIcon(project ? 'folder-active' : 'project')
+    this.contextValue = 'projectHeader'
+    this.command = {
+      command: 'devflow.selectProject',
+      title: 'Cambiar de proyecto',
+    }
+  }
+}
 
 export class TicketItem extends vscode.TreeItem {
   constructor(
     public readonly ticket: DevFlowTicket,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState = vscode.TreeItemCollapsibleState.None
   ) {
-    super(ticket.title, collapsibleState)
-
     const code = `DF-${ticket.id.slice(0, 4)}`
-    this.description = `${code} [${ticket.priority}]`
-    this.tooltip = `${ticket.title}\nPrioridad: ${ticket.priority}\nEstado: ${ticket.status}\nProyecto: ${ticket.projectId}`
+    super(`${code}: ${ticket.title}`, collapsibleState)
+
+    const priorityBadge = {
+      urgent: '🔴 Urgente',
+      high: '🟠 Alta',
+      medium: '🟡 Media',
+      low: '🟢 Baja',
+    }[ticket.priority] || '🟡 Media'
+
+    const branchBadge = ticket.gitBranch ? `🌿 ${ticket.gitBranch}` : ''
+    this.description = [priorityBadge, branchBadge].filter(Boolean).join(' • ')
+
+    const md = new vscode.MarkdownString()
+    md.isTrusted = true
+    md.appendMarkdown(`### [${code}] ${ticket.title}\n\n`)
+    md.appendMarkdown(`---\n\n`)
+    md.appendMarkdown(`- **Estado:** ${ticket.status}\n`)
+    md.appendMarkdown(`- **Prioridad:** ${priorityBadge}\n`)
+    if (ticket.gitBranch) {
+      md.appendMarkdown(`- **Rama Git:** \`${ticket.gitBranch}\`\n`)
+    }
+    if (ticket.assignedToEmail) {
+      md.appendMarkdown(`- **Asignado a:** ${ticket.assignedToEmail}\n`)
+    }
+    if (ticket.description) {
+      md.appendMarkdown(`\n> ${ticket.description}\n\n`)
+    }
+    md.appendMarkdown(`---\n\n*💡 Clic para ver opciones o usa los iconos de la derecha.*`)
+    this.tooltip = md
+
     this.contextValue = 'ticket'
 
     // Icon according to status
@@ -27,6 +77,12 @@ export class TicketItem extends vscode.TreeItem {
       default:
         this.iconPath = new vscode.ThemeIcon('circle-outline', new vscode.ThemeColor('charts.foreground'))
         break
+    }
+
+    this.command = {
+      command: 'devflow.ticketDetails',
+      title: 'Detalles del Ticket',
+      arguments: [this],
     }
   }
 }
@@ -63,6 +119,9 @@ export class TicketsProvider implements vscode.TreeDataProvider<vscode.TreeItem>
   readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | null | void> = this._onDidChangeTreeData.event
 
   private tickets: DevFlowTicket[] = []
+  public projects: DevFlowProject[] = []
+  public activeProject: DevFlowProject | null = null
+  public isAutoDetected: boolean = false
 
   refresh(): void {
     this._onDidChangeTreeData.fire()
@@ -72,6 +131,16 @@ export class TicketsProvider implements vscode.TreeDataProvider<vscode.TreeItem>
     return element
   }
 
+  getActiveProject(): DevFlowProject | null {
+    return this.activeProject
+  }
+
+  setActiveProject(project: DevFlowProject | null, isAuto = false): void {
+    this.activeProject = project
+    this.isAutoDetected = isAuto
+    this.refresh()
+  }
+
   async getChildren(element?: vscode.TreeItem): Promise<vscode.TreeItem[]> {
     const config = vscode.workspace.getConfiguration('devflow')
     const userId = config.get<string>('userId') || ''
@@ -79,6 +148,7 @@ export class TicketsProvider implements vscode.TreeDataProvider<vscode.TreeItem>
 
     if (!userId && !userEmail) {
       const connectItem = new vscode.TreeItem('Conectar cuenta de dev->flow...')
+      connectItem.description = 'Ingresa tu UID de dev-flow'
       connectItem.command = {
         command: 'devflow.connect',
         title: 'Conectar cuenta',
@@ -88,15 +158,35 @@ export class TicketsProvider implements vscode.TreeDataProvider<vscode.TreeItem>
     }
 
     if (!element) {
-      // Root: fetch all tickets and group by status
-      this.tickets = await fetchUserTickets(userId, userEmail)
+      // 1. Cargar proyectos si no están cargados
+      if (this.projects.length === 0) {
+        this.projects = await fetchUserProjects(userId)
+      }
+
+      // 2. Si no hay proyecto seleccionado, intentar auto-detección por repositorio Git
+      if (!this.activeProject && this.projects.length > 0) {
+        const { remoteUrl, folderName } = await getWorkspaceGitInfo()
+        const detected = autoDetectProject(this.projects, remoteUrl, folderName)
+        if (detected) {
+          this.activeProject = detected
+          this.isAutoDetected = true
+        }
+      }
+
+      // 3. Consultar tickets (filtrados por proyecto si hay uno activo)
+      const targetProjectId = this.activeProject ? this.activeProject.id : undefined
+      this.tickets = await fetchUserTickets(userId, userEmail, targetProjectId)
 
       const inProgress = this.tickets.filter(t => t.status === 'en-proceso')
       const todo = this.tickets.filter(t => t.status === 'sin-realizar')
       const testing = this.tickets.filter(t => t.status === 'testing')
       const done = this.tickets.filter(t => t.status === 'completado')
 
+      // Header de selector de proyecto
+      const header = new ProjectHeaderItem(this.activeProject, this.isAutoDetected, this.tickets.length)
+
       return [
+        header,
         new StatusGroupItem('En proceso', 'en-proceso', inProgress.length, vscode.TreeItemCollapsibleState.Expanded),
         new StatusGroupItem('Sin realizar', 'sin-realizar', todo.length, vscode.TreeItemCollapsibleState.Expanded),
         new StatusGroupItem('Testing', 'testing', testing.length, vscode.TreeItemCollapsibleState.Collapsed),
@@ -106,10 +196,14 @@ export class TicketsProvider implements vscode.TreeDataProvider<vscode.TreeItem>
 
     if (element instanceof StatusGroupItem) {
       const filtered = this.tickets.filter(t => t.status === element.status)
+      if (filtered.length === 0) {
+        const emptyItem = new vscode.TreeItem('No hay tickets en esta columna')
+        emptyItem.iconPath = new vscode.ThemeIcon('info')
+        return [emptyItem]
+      }
       return filtered.map(t => new TicketItem(t))
     }
 
     return []
   }
 }
-

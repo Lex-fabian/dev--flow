@@ -15,6 +15,14 @@ export interface DevFlowTicket {
   createdAt?: number
 }
 
+export interface DevFlowProject {
+  id: string
+  name: string
+  description?: string
+  github?: string
+  userId: string
+}
+
 const FIRESTORE_BASE = 'https://firestore.googleapis.com/v1/projects/dev-flow-7b197/databases/(default)/documents'
 
 function parseFirestoreField(field: any): any {
@@ -28,7 +36,58 @@ function parseFirestoreField(field: any): any {
   return null
 }
 
-export async function fetchUserTickets(userId: string, userEmail?: string): Promise<DevFlowTicket[]> {
+export async function fetchUserProjects(userId: string): Promise<DevFlowProject[]> {
+  try {
+    const queryPayload: any = {
+      structuredQuery: {
+        from: [{ collectionId: 'projects' }],
+        limit: 50,
+      },
+    }
+
+    if (userId) {
+      queryPayload.structuredQuery.where = {
+        fieldFilter: {
+          field: { fieldPath: 'userId' },
+          op: 'EQUAL',
+          value: { stringValue: userId },
+        },
+      }
+    }
+
+    const res = await fetch(`${FIRESTORE_BASE}:runQuery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(queryPayload),
+    })
+
+    if (!res.ok) return []
+    const results = await res.json()
+    if (!Array.isArray(results)) return []
+
+    const projects: DevFlowProject[] = []
+    for (const item of results) {
+      if (!item.document || !item.document.fields) continue
+      const f = item.document.fields
+      const pathParts = item.document.name.split('/')
+      const id = pathParts[pathParts.length - 1]
+
+      projects.push({
+        id,
+        name: parseFirestoreField(f.name) || 'Proyecto sin nombre',
+        description: parseFirestoreField(f.description) || '',
+        github: parseFirestoreField(f.github) || '',
+        userId: parseFirestoreField(f.userId) || '',
+      })
+    }
+    return projects
+  } catch (err) {
+    console.error('Error fetching projects in extension:', err)
+    return []
+  }
+}
+
+export async function fetchUserTickets(userId: string, userEmail?: string, projectId?: string): Promise<DevFlowTicket[]> {
   try {
     // Consulta estructurada por userId o assignedToEmail
     const queryPayload: any = {
@@ -69,13 +128,18 @@ export async function fetchUserTickets(userId: string, userEmail?: string): Prom
       const pathParts = item.document.name.split('/')
       const id = pathParts[pathParts.length - 1]
 
+      const ticketProjectId = parseFirestoreField(f.projectId) || ''
+      if (projectId && ticketProjectId && ticketProjectId !== projectId) {
+        continue
+      }
+
       tickets.push({
         id,
         title: parseFirestoreField(f.title) || 'Sin título',
         description: parseFirestoreField(f.description) || '',
         status: parseFirestoreField(f.status) || 'sin-realizar',
         priority: parseFirestoreField(f.priority) || 'medium',
-        projectId: parseFirestoreField(f.projectId) || '',
+        projectId: ticketProjectId,
         assignedToEmail: parseFirestoreField(f.assignedToEmail) || '',
         gitBranch: parseFirestoreField(f.gitBranch) || '',
         createdAt: parseFirestoreField(f.createdAt) || 0,
@@ -88,4 +152,3 @@ export async function fetchUserTickets(userId: string, userEmail?: string): Prom
     return []
   }
 }
-

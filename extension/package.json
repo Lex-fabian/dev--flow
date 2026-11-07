@@ -52,6 +52,12 @@
     },
     "commands": [
       {
+        "command": "devflow.selectProject",
+        "title": "Cambiar proyecto",
+        "category": "Dev Flow",
+        "icon": "$(folder)"
+      },
+      {
         "command": "devflow.connect",
         "title": "Conectar cuenta",
         "category": "Dev Flow"
@@ -61,6 +67,11 @@
         "title": "Actualizar tickets",
         "category": "Dev Flow",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "devflow.ticketDetails",
+        "title": "Acciones del ticket",
+        "category": "Dev Flow"
       },
       {
         "command": "devflow.createBranch",
@@ -90,14 +101,19 @@
     "menus": {
       "view/title": [
         {
+          "command": "devflow.selectProject",
+          "when": "view == devflow-tickets",
+          "group": "navigation@1"
+        },
+        {
           "command": "devflow.refresh",
           "when": "view == devflow-tickets",
-          "group": "navigation"
+          "group": "navigation@2"
         },
         {
           "command": "devflow.connect",
           "when": "view == devflow-tickets",
-          "group": "navigation"
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
